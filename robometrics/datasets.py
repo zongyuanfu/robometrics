@@ -1,22 +1,65 @@
-from typing import Any, Dict
+from pathlib import Path
+from typing import Any, Dict, Optional, Union
 
-import numpy as np
 import yaml
 
 from robometrics.file_structure import get_dataset_path
 
-try:
-    import geometrout
-except ImportError:
-    _HAS_GEOMETROUT = False
-else:
-    _HAS_GEOMETROUT = True
+_DATASET_FILES = {
+    "demo": "demo_set.yaml",
+    "mb": "mb_set.yaml",
+    "mpinets": "mpinets_set.yaml",
+}
+
+
+def load_raw_dataset(
+    name: str, data_dir: Optional[Union[str, Path]] = None
+) -> Dict[str, Any]:
+    """Read a fresh raw dataset from packaged YAML or an explicit directory.
+
+    Values, quaternion conventions and problem ordering are left unchanged.
+    Raw loading needs only PyYAML; numerical and geometry imports are deferred
+    to the existing structured-data functions.
+    """
+    if name not in _DATASET_FILES:
+        raise ValueError(
+            "unknown dataset {!r}; choose one of: {}".format(
+                name, ", ".join(sorted(_DATASET_FILES))
+            )
+        )
+    directory = get_dataset_path() if data_dir is None else Path(data_dir)
+    path = directory / _DATASET_FILES[name]
+    loader = getattr(yaml, "CSafeLoader", yaml.SafeLoader)
+    try:
+        with path.open(encoding="utf-8") as stream:
+            raw = yaml.load(stream, Loader=loader)
+    except FileNotFoundError as exc:
+        raise FileNotFoundError(
+            "dataset {!r} not found at {}; set data_dir to a directory "
+            "containing {}".format(name, path, _DATASET_FILES[name])
+        ) from exc
+    if not isinstance(raw, dict):
+        raise ValueError("dataset {} must contain a mapping".format(path))
+    return raw
+
+
+def list_problem_groups(
+    name: str, data_dir: Optional[Union[str, Path]] = None
+) -> Dict[str, int]:
+    """Return group sizes in the dataset's original order."""
+    raw = load_raw_dataset(name, data_dir)
+    return {group: len(problems) for group, problems in raw.items()}
 
 
 def structure_problems(problem_dict):
-    assert (
-        _HAS_GEOMETROUT
-    ), "Optional package geometrout not installed, so this function is disabled"
+    try:
+        import geometrout
+    except ImportError as exc:
+        raise AssertionError(
+            "Optional package geometrout not installed; install "
+            "robometrics[evaluator] to use structured datasets"
+        ) from exc
+    import numpy as np
 
     assert set(problem_dict.keys()) == set(
         [
@@ -63,9 +106,7 @@ def structure_problems(problem_dict):
 
 
 def demo_raw() -> Dict[str, Any]:
-    path = get_dataset_path() / "demo_set.yaml"
-    with open(path) as f:
-        return yaml.safe_load(f)
+    return load_raw_dataset("demo")
 
 
 def structure_dataset(raw_dataset: Dict[str, Any]) -> Dict[str, Any]:
@@ -76,9 +117,7 @@ def structure_dataset(raw_dataset: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def motion_benchmaker_raw() -> Dict[str, Any]:
-    path = get_dataset_path() / "mb_set.yaml"
-    with open(path) as f:
-        return yaml.safe_load(f)
+    return load_raw_dataset("mb")
 
 
 def motion_benchmaker() -> Dict[str, Any]:
@@ -87,9 +126,7 @@ def motion_benchmaker() -> Dict[str, Any]:
 
 
 def mpinets_raw() -> Dict[str, Any]:
-    path = get_dataset_path() / "mpinets_set.yaml"
-    with open(path) as f:
-        return yaml.safe_load(f)
+    return load_raw_dataset("mpinets")
 
 
 def mpinets() -> Dict[str, Any]:

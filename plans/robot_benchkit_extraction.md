@@ -1,6 +1,7 @@
 # Robometrics 数据、CPU ESDF 与公共评估增量扩展计划
 
-日期：2026-10-14。状态：阶段 0 已完成，修订前状态已有独立 Git 快照；代码迁移尚未开始。
+日期：2026-10-14。状态：阶段 2 的 CPU 实现已完成；Git 提交、旧锁文件重建
+及 GPU 联合 smoke 待解决当前环境限制。
 
 ## 1. 开发位置与目标
 
@@ -57,7 +58,7 @@ host 数据与 CUDA 上传接口设计，并随各阶段做小规模接入验证
     └── robot_benchkit_extraction.md
 ```
 
-图中的 `geometry.py` 和 `esdf.py` 是后续新增文件，本轮不创建空壳。
+图中的 `geometry.py` 和 `esdf.py` 已在阶段 2 实现。
 阶段 3 再增加 `cpp/esdf.cpp` 与必要构建文件；性能脚本只需一个
 `benchmarks/esdf.py`。阶段 4 确有需要时再增加 `franka.py`、`sampling.py`、
 `trajectory.py`、`success.py` 和 NumPy `kinematics.py`，不提前占位。
@@ -140,23 +141,15 @@ Planigo 现有 `EsdfContext.from_mapping()` 和 `CudaBsplineSolver`；由 Planig
 
 阶段 0 只调整计划与保存基线，完整数值基线仍需在对应迁移阶段记录。
 
-本次先冻结修订前的 23 个源码、资源和计划文件：
+当前仓库已由用户初始化，23 个源码、资源和计划文件在本仓库冻结：
 
-- Git commit：`a427abef73f3d4abd17007ec38121dd5c13e5962`。
+- Git commit：`d7ec62dca070323df739dfc716098d164020803f`。
 - 基线 tag：`robometrics-baseline-20261014`。
-- 持久快照：[robometrics-baseline-20261014.bundle](robometrics-baseline-20261014.bundle)。
 
-当前会话中的 `.git` 为只读空目录，无法在原仓库中提交，因此快照使用独立
-Git 仓库存储，再导出完整 bundle，不继承原仓库历史。后续计划修订单独提交，
-bundle 保留基线 tag 和修订后的 main；bundle 文件本身不纳入快照。
-可在其他可写目录恢复：
+三套 YAML 的 SHA256 与来源记录见 README。后续验证使用该本仓库基线，
+此前的独立 bundle 不作为本仓库历史。
 
-```bash
-git clone /home/fzy/codes/robometrics/plans/robometrics-baseline-20261014.bundle /tmp/robometrics-restored
-git -C /tmp/robometrics-restored switch --detach robometrics-baseline-20261014
-```
-
-### 阶段 1：数据入口与 NumPy 安装兼容（下一次代码改动）
+### 阶段 1：数据入口与 NumPy 安装兼容（实现已完成，旧锁文件待重建）
 
 改动集中在 `datasets.py`、`pyproject.toml`、数据测试及 README：
 
@@ -178,7 +171,7 @@ git -C /tmp/robometrics-restored switch --detach robometrics-baseline-20261014
 
 **本阶段结束即可独立交付。暂不迁入 ESDF、模型或评估代码。**
 
-### 阶段 2：解析几何与 NumPy CPU ESDF
+### 阶段 2：解析几何与 NumPy CPU ESDF（CPU 实现与数值对照已完成）
 
 只增加 `geometry.py`、`esdf.py` 及对应测试：
 
@@ -312,7 +305,45 @@ robometrics = { path = "../../codes/robometrics", editable = true }
 
 ## 7. 当前交付与下一步
 
-当前交付是 Git 基线 bundle 与修订后的计划，保留现有包布局并明确
-纯 NumPy / CPU C++ 实现和 Planigo 分阶段接入顺序。
-下一次实施仅执行阶段 1；数据与安装兼容验收完成后，再开始阶段 2。
-本文件中的后续模块、C++ 构建、Planigo 接入和发布均为计划，尚未执行。
+已确认本仓库 Git 基线，并实施阶段 1 的统一数据入口、旧接口转发、延迟依赖
+导入、NumPy 声明与安装文档。原始数据和旧结构化数值逻辑保持不变。
+
+本次验证结果：
+
+- 源码环境：15 项测试通过，包括原有结构化数据读取。
+- Python 3.11 干净安装环境：NumPy 1.26.4 / 2.4.6 各有 14 项测试通过；
+  各跳过 1 个未安装可选几何依赖的结构化测试。
+- 两个环境均从构建 wheel 安装，在仓库外执行测试；无 JAX、Torch、cuRobo、
+  Planigo、geometrout 或 urchin。
+- wheel / sdist 的三套 YAML 和两份许可文本与基线逐字节一致。
+
+Poetry 构建后端保持不变。当前环境未安装完整 Poetry，PyPI 访问受网络限制；
+已有 `poetry.lock` 与原声明不一致，重建锁文件仍是阶段 1 的剩余项，未手工
+改写或伪造锁结果。保留该遗留项，按本次执行指令继续阶段 2。
+
+阶段 2 已增加 `geometry.py`、`esdf.py` 和对应测试：
+
+- NumPy 1.26.4 / 2.4.6 的 37 项几何/ESDF 测试均通过。
+- 新 wheel / sdist 包含两个新增模块并保留数据与许可资源。两种 NumPy 的
+  独立安装环境在仓库外执行完整测试，各有 51 项通过、1 项可选结构化测试
+  跳过；安装环境没有 JAX、GPU runtime 或 Planigo。
+- 对照 Planigo commit `ba59e35adcfc4a6048fe27e9c03e26c8ec7516d0` 的原始
+  NumPy 计算部分与 float32 host 输出，不加载 JAX。90 个空/随机混合/真实
+  数据场景共 69,300 个 voxel 的距离与原始 context 字段逐值一致。
+- Planigo 原 `EsdfContext.from_mapping()` 接收新 context；实际 CUDA facade
+  也通过 host 校验和模型指纹校验，但在设备初始化时返回
+  `no CUDA-capable device is detected`。当前会话没有 `/dev/nvidia*`，
+  GPU 上传/求解/执行/reset smoke 尚未通过，不能记为已验证。
+- 本库仅增加 CPU 实现，workspace/profile 策略和 Planigo 代码未修改。
+
+本次数值对照的 Planigo 源文件 SHA256：
+
+| 文件 | SHA256 |
+|---|---|
+| `geometry/primitives.py` | `f83818a72807173ddefdb630f1a5082594329844d1564c8574249ad1fcda55ec` |
+| `geometry/context.py` | `2f12cfcbfb8c746f94bc4c371dd8b75fcce0b8786be0583bca2de8700309fbf0` |
+| `geometry/esdf_builder.py` | `e3c279825665a69d18c2309251831eb4ce6767babbe05360fc6a5ea8875a6774` |
+
+已按指令尝试提交阶段 1；当前会话仍不能写入 `.git/index.lock`，提交未生成。
+源码修改保留在本仓库工作区，没有再创建独立 Git 快照或改动既有基线历史。
+下一实现阶段为单线程 C++；当前遗留验收项需继续保留和复核。
