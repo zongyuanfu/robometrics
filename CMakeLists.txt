@@ -1,26 +1,29 @@
-cmake_minimum_required(VERSION 3.18)
-project(robometrics_esdf LANGUAGES CXX)
+cmake_minimum_required(VERSION 3.15...4.4)
 
-find_package(Python 3.8 COMPONENTS Interpreter Development.Module REQUIRED)
+project(${SKBUILD_PROJECT_NAME} LANGUAGES CXX)
+
 set(PYBIND11_FINDPYTHON ON)
-if(NOT pybind11_DIR)
-  execute_process(COMMAND "${Python_EXECUTABLE}" -m pybind11 --cmakedir
-    OUTPUT_VARIABLE pybind11_DIR OUTPUT_STRIP_TRAILING_WHITESPACE RESULT_VARIABLE result)
-  if(NOT result EQUAL 0)
-    message(FATAL_ERROR "Install pybind11>=2.12 for ${Python_EXECUTABLE} before configuring")
-  endif()
-endif()
-find_package(pybind11 2.12 CONFIG REQUIRED)
+find_package(pybind11 CONFIG REQUIRED)
 
-pybind11_add_module(_esdf_cpp NO_EXTRAS cpp/esdf.cpp)
-target_compile_features(_esdf_cpp PRIVATE cxx_std_17)
-if(MSVC)
-  target_compile_options(_esdf_cpp PRIVATE /fp:strict)
-else()
-  target_compile_options(_esdf_cpp PRIVATE -fno-fast-math -ffp-contract=off)
-endif()
-file(SHA256 "${CMAKE_CURRENT_SOURCE_DIR}/cpp/esdf.cpp" source_sha256)
+pybind11_add_module(
+    _esdf_cpp
+    robometrics/cpp/esdf.cpp
+)
+
+# 计算 C++ 源码的 SHA256
+file(SHA256 "${CMAKE_CURRENT_SOURCE_DIR}/robometrics/cpp/esdf.cpp" ESDF_SOURCE_HASH)
+
+# 将构建信息传入 C++
 target_compile_definitions(_esdf_cpp PRIVATE
-  ESDF_SOURCE_SHA256="${source_sha256}" ESDF_BUILD_TYPE="${CMAKE_BUILD_TYPE}"
-  ESDF_COMPILER="${CMAKE_CXX_COMPILER_ID} ${CMAKE_CXX_COMPILER_VERSION}")
-install(TARGETS _esdf_cpp LIBRARY DESTINATION robometrics RUNTIME DESTINATION robometrics)
+    ESDF_SOURCE_SHA256="${ESDF_SOURCE_HASH}"
+    ESDF_BUILD_TYPE="$<CONFIG>"
+    ESDF_COMPILER="${CMAKE_CXX_COMPILER_ID} ${CMAKE_CXX_COMPILER_VERSION}"
+)
+
+target_compile_features(_esdf_cpp PRIVATE cxx_std_17)
+
+install(
+    TARGETS _esdf_cpp
+    LIBRARY DESTINATION robometrics
+    RUNTIME DESTINATION robometrics
+)

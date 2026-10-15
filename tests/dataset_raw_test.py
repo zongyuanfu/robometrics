@@ -106,5 +106,5 @@ assert list_problem_groups('demo') == {'bookshelf_small_panda': 5}
 
 def test_structured_data_reports_missing_optional_dependency(monkeypatch):
     monkeypatch.setitem(sys.modules, "geometrout", None)
-    with pytest.raises(AssertionError, match="robometrics\\[evaluator\\]"):
+    with pytest.raises(AssertionError, match=r"pip install 'geometrout>=0\.1\.0\.10,<0\.2'"):
         structure_problems({})

@@ -56,8 +56,9 @@ def structure_problems(problem_dict):
         import geometrout
     except ImportError as exc:
         raise AssertionError(
-            "Optional package geometrout not installed; install "
-            "robometrics[evaluator] to use structured datasets"
+            "Optional package geometrout not installed; run "
+            "python -m pip install 'geometrout>=0.1.0.10,<0.2' "
+            "to use structured datasets"
         ) from exc
     import numpy as np
 

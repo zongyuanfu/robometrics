@@ -1,25 +1,57 @@
-[tool.poetry]
+[build-system]
+requires = [
+    "scikit-build-core>=1.0,<2",
+    "pybind11>=2.12",
+]
+build-backend = "scikit_build_core.build"
+
+
+[project]
 name = "robometrics"
-version = "0.1.0"
-description = "A unified framework for metrics evaluation for robotic manipulation"
-authors = ["Adam Fishman"]
+version = "0.2.0"
+description = "Robot motion planning datasets, metrics, and ESDF utilities"
 readme = "README.md"
-include = [
-    { path = "Licenses", format = ["sdist", "wheel"] },
-    { path = "CMakeLists.txt", format = ["sdist"] },
-    { path = "cpp", format = ["sdist"] },
+requires-python = ">=3.11,<3.12"
+
+dependencies = [
+    "numpy>=1.26.4",
+    "PyYAML>=6.0",
 ]
 
-[tool.poetry.dependencies]
-python = ">=3.11,<3.12"
-numpy = ">=1.15,<3"
-pyyaml = ">5.3" # there is a bug in installing pyyaml < 6.0 in python 3.10
-geometrout = { version = "^0.1.0.10", optional = true }
-urchin = { version = "^0.0.26", optional = true }
+license = "MIT"
+license-files = ["LICENSE", "Licenses"]
 
-[tool.poetry.extras]
-evaluator = ["geometrout", "urchin"]
 
-[build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
+[tool.scikit-build]
+wheel.packages = ["robometrics"]
+
+# 如果 C++ 源码放到 robometrics/cpp/，
+# 不需要把 .cpp 源码塞进 binary wheel。
+wheel.exclude = [
+    "robometrics/cpp/**",
+]
+
+# 明确保证源码包可以重新构建 wheel。
+sdist.include = [
+    "CMakeLists.txt",
+    "robometrics/**/*.py",
+    "robometrics/cpp/*.cpp",
+    "robometrics/content/**/*.yaml",
+    "robometrics/content/**/*.yml",
+    "tests/**/*.py",
+    "README.md",
+    "LICENSE",
+    "Licenses",
+]
+
+# Keep local native builds and Python caches out of source archives.
+sdist.exclude = [
+    "**/*.so",
+    "**/*.pyd",
+    "**/*.dll",
+    "**/*.dylib",
+    "**/*.o",
+    "**/*.obj",
+    "**/*.pyc",
+    "**/__pycache__/**",
+]
