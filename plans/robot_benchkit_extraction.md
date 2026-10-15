@@ -1,7 +1,8 @@
 # Robometrics 数据、CPU ESDF 与公共评估增量扩展计划
 
-日期：2026-10-14。状态：阶段 2 的 CPU 实现已完成；Git 提交、旧锁文件重建
-及 GPU 联合 smoke 待解决当前环境限制。
+日期：2026-10-14。状态：阶段 1 / 2 已提交；阶段 3a 单线程 C++ 已实现并验证。
+本库依赖锁已同步；2026-10-15 在本库环境通过原生 CUDA 联合 smoke，
+Planigo 自身环境/锁同步及完整规划评估仍待验收。
 
 ## 1. 开发位置与目标
 
@@ -59,7 +60,7 @@ host 数据与 CUDA 上传接口设计，并随各阶段做小规模接入验证
 ```
 
 图中的 `geometry.py` 和 `esdf.py` 已在阶段 2 实现。
-阶段 3 再增加 `cpp/esdf.cpp` 与必要构建文件；性能脚本只需一个
+阶段 3a 已增加 `cpp/esdf.cpp` 与根目录 CMakeLists.txt；性能脚本只需一个
 `benchmarks/esdf.py`。阶段 4 确有需要时再增加 `franka.py`、`sampling.py`、
 `trajectory.py`、`success.py` 和 NumPy `kinematics.py`，不提前占位。
 
@@ -123,8 +124,8 @@ context = build_esdf_from_scene(
 )
 ```
 
-以上为阶段 2 的接口方向，签名在该阶段验收时固定。`backend="cpp"` 和
-`threads` 到阶段 3 才引入；显式指定 C++ 而扩展不可用时直接报错。
+默认 NumPy 接口保持不变；阶段 3a 已增加 `backend="cpp"`，扩展不可用时
+直接报错。线程参数只在实测需要阶段 3b 时引入。
 context 保留 `as_mapping()`，包含 `grid`、`origin`、`voxel_size`、
 `grid_shape`、`lower_bound`、`upper_bound` 和 `version`。布局与字段对齐
 Planigo 现有 `EsdfContext.from_mapping()` 和 `CudaBsplineSolver`；由 Planigo
@@ -149,7 +150,7 @@ Planigo 现有 `EsdfContext.from_mapping()` 和 `CudaBsplineSolver`；由 Planig
 三套 YAML 的 SHA256 与来源记录见 README。后续验证使用该本仓库基线，
 此前的独立 bundle 不作为本仓库历史。
 
-### 阶段 1：数据入口与 NumPy 安装兼容（实现已完成，旧锁文件待重建）
+### 阶段 1：数据入口与 NumPy 安装兼容（已完成）
 
 改动集中在 `datasets.py`、`pyproject.toml`、数据测试及 README：
 
@@ -186,7 +187,7 @@ Planigo 现有 `EsdfContext.from_mapping()` 和 `CudaBsplineSolver`；由 Planig
 结果对齐 Planigo 冻结基线。验收时再验证 `as_mapping()` 可由现有 CUDA
 facade 接收，优先替换 ESDF 构建入口，不等待全部模型和评估迁移完成。
 
-### 阶段 3a：单线程 C++ 后端
+### 阶段 3a：单线程 C++ 后端（已实现并验证）
 
 新增一个 `cpp/esdf.cpp`，Python 侧继续使用阶段 2 的同一入口和 context。
 在本阶段选择最小构建方式，不先铺设 `include/src/backends` 多层目录。
@@ -317,9 +318,10 @@ robometrics = { path = "../../codes/robometrics", editable = true }
   Planigo、geometrout 或 urchin。
 - wheel / sdist 的三套 YAML 和两份许可文本与基线逐字节一致。
 
-Poetry 构建后端保持不变。当前环境未安装完整 Poetry，PyPI 访问受网络限制；
-已有 `poetry.lock` 与原声明不一致，重建锁文件仍是阶段 1 的剩余项，未手工
-改写或伪造锁结果。保留该遗留项，按本次执行指令继续阶段 2。
+Poetry 构建后端保持不变。阶段 3a 使用仓库内 `.venv` 完成 Poetry 锁文件
+重建，保留 lock 2.0 格式并通过 `poetry check --lock`。Python 支持范围先
+明确为已验证的 `>=3.11,<3.12`；锁定 NumPy 2.4.6，声明仍允许 NumPy 1.x / 2.x。
+`geometrout` / `urchin` 仍为可选依赖。
 
 阶段 2 已增加 `geometry.py`、`esdf.py` 和对应测试：
 
@@ -344,6 +346,58 @@ Poetry 构建后端保持不变。当前环境未安装完整 Poetry，PyPI 访�
 | `geometry/context.py` | `2f12cfcbfb8c746f94bc4c371dd8b75fcce0b8786be0583bca2de8700309fbf0` |
 | `geometry/esdf_builder.py` | `e3c279825665a69d18c2309251831eb4ce6767babbe05360fc6a5ea8875a6774` |
 
-已按指令尝试提交阶段 1；当前会话仍不能写入 `.git/index.lock`，提交未生成。
-源码修改保留在本仓库工作区，没有再创建独立 Git 快照或改动既有基线历史。
-下一实现阶段为单线程 C++；当前遗留验收项需继续保留和复核。
+阶段 1 / 2 已由用户提交为 `870bdd8`，在本仓库既有历史上继续开发。
+当前阶段 3a 的源码修改保留在工作区，未自动提交。
+
+
+阶段 3a 的实现保持一个 C++ 文件和同一 Python 构建入口：
+
+- CMake + pybind11 可选构建；普通 wheel 仍为纯 Python，sdist 包含 C++ 源码。
+  两种安装在同一本地环境通过隔离运行验证；数据和许可资源逐字节保持一致。
+- 单线程融合 voxel 计算，释放 GIL，双精度中间值、float32 坐标和输出；
+  明确关闭 fast-math 与浮点收缩，不引入 OpenMP、CUDA 或 JAX。
+- 默认 NumPy；显式 C++ 缺失时抛错。context 所有权、字段与只读语义一致。
+- 同一仓库 `.venv` 分别使用 NumPy 1.26.4 / 2.4.6 执行完整测试，
+  各 75 项通过、1 项缺少可选几何依赖跳过；同一个已编译扩展兼容两版本。
+- 空场景、四类旋转 primitive、64 个随机混合场景、demo 五题和阈值附近
+  对照通过，测试容差为绝对 2e-7 m，不宣称 C++ 全场景逐 bit 相同。
+- 本地 `.venv` 与缓存 `.uv-cache` 均在当前仓库并忽略提交，构建和报告在
+  `build/`，没有再使用临时目录虚拟环境。
+- Ryzen 7 7700 / GCC 11.4 Release / NumPy 2.4.6，单线程、2 cm 分辨率、
+  120×120×121 网格、每题一次丢弃的 warmup 后三次重新构建：demo 五题
+  NumPy / C++ 中位数 771 / 62 ms，P90 779 / 64 ms，峰值 RSS 275 / 50 MiB；
+  MB 八组首题中位数 1119 / 78 ms，P90 1596 / 136 ms，峰值 RSS 315 / 50 MiB。
+  RSS 使用 Linux 独立工作进程 VmHWM，避免继承父进程历史峰值。样本不足以
+  代表 MB800 或 MPINets 全量性能，不与旧设备记录直接比较。
+
+下一步先复核 Planigo 的 host 接入，再进入阶段 4a 的模型对照；目前小样本
+串行性能已低于初始 300 ms 目标，阶段 3b 不自动执行，待更大样本证明需要。
+GPU smoke 的设备限制仍保留，不能由 CPU 测试通过推断 GPU 联合验证完成。
+
+
+### 2026-10-15：当前仓库内的薄转发联合检查
+
+按用户最新指令，不在 Planigo 目录测试，不改其 `.venv`；全部新测试从本仓库
+执行，使用 `/home/fzy/codes/robometrics/.venv/bin/python`、NumPy 2.4.6。
+
+- Planigo 的 `geometry/esdf_builder.py` 已改为薄转发，默认 C++、显式可选 NumPy，
+  保留既有 workspace 默认值与 helper import，返回 host mapping。
+- Planigo 的 JAX 查询边界增加数组转换，数值算法保持原样；本轮不安装或运行
+  JAX，因此该查询接入与完整 evaluator 尚未验证。
+- Planigo 的 pyproject 已声明当前库与本地 editable 来源；其 uv.lock 和原有
+  `.venv` 尚未同步，不能认为原环境已经能够直接运行新入口。
+- 本库新增 `tests/planigo_test.py`，由显式环境变量选择外部 checkout，默认跳过。
+  五题 demo host mapping、默认 workspace、后端选择和现有 ESDF 测试共 68 项通过。
+- 本库新增 `benchmarks/planigo_smoke.py`，无 JAX/SciPy，从薄转发得到实际 host
+  网格并直接调用现有原生 CUDA binding。沙箱内最初检测不到设备；获准访问实际
+  GPU 后，模型指纹校验、两张不同地图上传、初始化、8 次迭代求解、diagnostics、
+  前缀执行、reset 和资源释放全部通过。两张同尺寸地图仅分配一次网格 buffer。
+- CUDA binary：`igo_solver_pkg/build_rtx5060_20261013/planigo_cuda_bspline`，
+  Release/sm_120；模型 SHA256 为
+  `fcc310aa7d624e5c747c06b4fa4483ce4dfca4cf55575de0aa79389040883c63`。
+  完整本地报告位于忽略提交的 `build/planigo-smoke.json`。
+
+该 smoke 验证的是原生调用链，不是完整 planner 的目标到达、IK 或评估成功率。
+原阶段 2 的 GPU 不可见记录作为历史保留，不再作为本轮原生 smoke 的阻塞项。
+后续先同步 Planigo 环境/锁并验收 JAX 查询和 facade，再继续模型迁移；C++ 源码
+目录移动和 pip 自动编译仍留待后续单独执行。

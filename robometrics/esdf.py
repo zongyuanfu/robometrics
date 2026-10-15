@@ -142,7 +142,45 @@ def _sdf_cylinder(points_local, radius, height):
     return outside + inside
 
 
-def build_esdf_from_scene(scene_cfg, workspace_center, workspace_extent, voxel_size=0.02):
+def _cpp_obstacles(scene):
+    """Preserve NumPy quaternion arithmetic while precomputing small rotations."""
+    records = []
+    for kind in ("cuboid", "sphere", "capsule", "cylinder"):
+        for obj in getattr(scene, kind):
+            record = dict(vars(obj), kind=kind)
+            record["rotation"] = _quat_to_rot_matrix(*obj.pose[3:]).ravel()
+            records.append(record)
+    return records
+
+
+def _load_cpp():
+    try:
+        from . import _esdf_cpp
+    except ImportError as exc:
+        raise RuntimeError(
+            "C++ ESDF extension is unavailable; build/install it with CMake for this Python interpreter"
+        ) from exc
+    return _esdf_cpp
+
+
+def _build_numpy(scene_cfg, xs, ys, zs):
+    grid_xyz = np.stack(np.meshgrid(xs, ys, zs, indexing="ij"), axis=-1).astype(np.float32)
+    esdf = np.full((len(xs), len(ys), len(zs)), 10.0, dtype=np.float32)
+    for obj in scene_cfg.cuboid:
+        esdf = np.minimum(esdf, _sdf_box(_world_to_local(grid_xyz, obj.pose), obj.dims))
+    for obj in scene_cfg.sphere:
+        esdf = np.minimum(esdf, _sdf_sphere(_world_to_local(grid_xyz, obj.pose), obj.radius))
+    for obj in scene_cfg.capsule:
+        sd = _sdf_capsule(_world_to_local(grid_xyz, obj.pose), obj.radius, obj.base, obj.tip)
+        esdf = np.minimum(esdf, sd)
+    for obj in scene_cfg.cylinder:
+        sd = _sdf_cylinder(_world_to_local(grid_xyz, obj.pose), obj.radius, obj.height)
+        esdf = np.minimum(esdf, sd)
+    return esdf
+
+
+def build_esdf_from_scene(scene_cfg, workspace_center, workspace_extent, voxel_size=0.02,
+                          *, backend="numpy"):
     """Build a readonly host ESDF from four types of analytic obstacles.
 
     Distances are the pointwise minimum of primitive SDFs, capped above at
@@ -150,7 +188,11 @@ def build_esdf_from_scene(scene_cfg, workspace_center, workspace_extent, voxel_s
     and origin is the first voxel centre. Physical upper bounds remain those
     requested even when ceil(extent / voxel_size) extends the grid beyond them.
     Every axis must have at least two voxels, matching Planigo's host contract.
+    NumPy is the default. Explicit C++ selection requires the optional extension
+    and never silently falls back to NumPy.
     """
+    if backend not in ("numpy", "cpp"):
+        raise ValueError("backend must be 'numpy' or 'cpp'")
     _vector(workspace_center, 3, "workspace_center")
     extent = _vector(workspace_extent, 3, "workspace_extent")
     if np.any(extent <= 0):
@@ -167,19 +209,10 @@ def build_esdf_from_scene(scene_cfg, workspace_center, workspace_extent, voxel_s
     xs = np.linspace(x_min + voxel_size / 2.0, x_min + (nx - 0.5) * voxel_size, nx)
     ys = np.linspace(y_min + voxel_size / 2.0, y_min + (ny - 0.5) * voxel_size, ny)
     zs = np.linspace(z_min + voxel_size / 2.0, z_min + (nz - 0.5) * voxel_size, nz)
-    grid_xyz = np.stack(np.meshgrid(xs, ys, zs, indexing="ij"), axis=-1).astype(np.float32)
-    esdf = np.full((nx, ny, nz), 10.0, dtype=np.float32)
-
-    for obj in scene_cfg.cuboid:
-        esdf = np.minimum(esdf, _sdf_box(_world_to_local(grid_xyz, obj.pose), obj.dims))
-    for obj in scene_cfg.sphere:
-        esdf = np.minimum(esdf, _sdf_sphere(_world_to_local(grid_xyz, obj.pose), obj.radius))
-    for obj in scene_cfg.capsule:
-        sd = _sdf_capsule(_world_to_local(grid_xyz, obj.pose), obj.radius, obj.base, obj.tip)
-        esdf = np.minimum(esdf, sd)
-    for obj in scene_cfg.cylinder:
-        sd = _sdf_cylinder(_world_to_local(grid_xyz, obj.pose), obj.radius, obj.height)
-        esdf = np.minimum(esdf, sd)
+    if backend == "numpy":
+        esdf = _build_numpy(scene_cfg, xs, ys, zs)
+    else:
+        esdf = _load_cpp().build(xs, ys, zs, _cpp_obstacles(scene_cfg))
 
     origin = np.array([x_min + voxel_size / 2.0, y_min + voxel_size / 2.0,
                        z_min + voxel_size / 2.0], dtype=np.float32)

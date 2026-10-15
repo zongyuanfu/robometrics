@@ -1,1 +1,9 @@
 *.pyc
+__pycache__/
+/.venv/
+/.uv-cache/
+/.pytest_cache/
+/build/
+/dist/
+*.so
+*.pyd

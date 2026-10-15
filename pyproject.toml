@@ -4,10 +4,14 @@ version = "0.1.0"
 description = "A unified framework for metrics evaluation for robotic manipulation"
 authors = ["Adam Fishman"]
 readme = "README.md"
-include = [{ path = "Licenses", format = ["sdist", "wheel"] }]
+include = [
+    { path = "Licenses", format = ["sdist", "wheel"] },
+    { path = "CMakeLists.txt", format = ["sdist"] },
+    { path = "cpp", format = ["sdist"] },
+]
 
 [tool.poetry.dependencies]
-python = "^3.7"
+python = ">=3.11,<3.12"
 numpy = ">=1.15,<3"
 pyyaml = ">5.3" # there is a bug in installing pyyaml < 6.0 in python 3.10
 geometrout = { version = "^0.1.0.10", optional = true }

@@ -1,5 +1,8 @@
 import numpy as np
 import pytest
+import sys
+
+import robometrics
 
 from robometrics.esdf import (
     EsdfContext,
@@ -173,3 +176,16 @@ def test_snapshot_rejects_missing_fields_and_non_numpy_grid():
         EsdfContext.from_mapping({})
     with pytest.raises(TypeError, match="host numpy"):
         EsdfContext([[[0]*2]*2]*2, [.5]*3, 1, (2, 2, 2), [0]*3, [2]*3)
+
+
+def test_unknown_backend():
+    with pytest.raises(ValueError, match="backend"):
+        build_esdf_from_scene(Scene(), (0, 0, 0), (2, 2, 2), 1, backend="unknown")
+
+
+def test_missing_cpp_extension_does_not_fall_back(monkeypatch):
+    monkeypatch.delattr(robometrics, "_esdf_cpp", raising=False)
+    monkeypatch.setitem(sys.modules, "robometrics._esdf_cpp", None)
+    with pytest.raises(RuntimeError, match=r"C\+\+ ESDF extension is unavailable"):
+        build_esdf_from_scene(Scene(), (0, 0, 0), (2, 2, 2), 1, backend="cpp")
+    assert build_esdf_from_scene(Scene(), (0, 0, 0), (2, 2, 2), 1).grid.shape == (2, 2, 2)

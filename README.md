@@ -11,7 +11,7 @@ Install from this checkout:
 python -m pip install .
 ```
 
-The core dependencies are NumPy and PyYAML. Raw dataset loading uses only PyYAML;
+The currently supported Python version is 3.11. The core dependencies are NumPy and PyYAML. Raw dataset loading uses only PyYAML;
 it does not import NumPy, geometrout, urchin, JAX, Torch, cuRobo or Planigo.
 The NumPy requirement allows both 1.x and 2.x.
 
@@ -25,8 +25,7 @@ python -m pip install '.[evaluator]'
 ```
 
 Raw loading compatibility does not imply NumPy 2 compatibility of those optional
-dependencies. The historical `poetry.lock` predates the current dependency
-declarations and needs regeneration before using `poetry install`.
+dependencies. `poetry.lock` is synchronized with the current declarations.
 The existing structured loaders were separately verified with NumPy 1.26.4 and
 geometrout 0.1.3.
 
@@ -88,12 +87,98 @@ for OOB checks.
 `as_mapping()` retains Planigo's `grid`, `origin`, `voxel_size`, `grid_shape`,
 `lower_bound`, `upper_bound` and `version` fields for its existing host/CUDA
 boundary. CPU construction imports no JAX, GPU runtime or planner. Distance
-queries and C++ acceleration are not part of this stage.
+queries are not part of this stage. Optional single-thread C++ construction uses
+the same context and host fields.
 
 The numerical source is Planigo commit `ba59e35adcfc4a6048fe27e9c03e26c8ec7516d0`,
 files `planigo/geometry/primitives.py`, `context.py`, and the NumPy computation
 in `esdf_builder.py`. In NumPy 1.26.4 and 2.4.6, 90 scenes matched the original
 float32 host reference voxel-for-voxel. This comparison does not run JAX.
+
+## Optional C++ ESDF
+
+Use a local project environment. A C++17 compiler, CMake 3.18+ and Python
+headers are required for this optional build:
+
+```bash
+python3.11 -m venv .venv
+.venv/bin/python -m pip install -e . pytest 'pybind11>=2.12'
+cmake -S . -B build/esdf -DCMAKE_BUILD_TYPE=Release \
+    -DPython_EXECUTABLE="$PWD/.venv/bin/python"
+cmake --build build/esdf -j 2
+cmake --install build/esdf --prefix .
+PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 .venv/bin/python -m pytest tests
+```
+
+The install command above places the extension in the source package for editable
+use. For a regular installed package, use its site-packages directory as the
+CMake install prefix. The standard wheel remains pure Python; the sdist includes
+CMake and C++ sources. Generated binaries, build files and `.venv` are ignored.
+
+Select C++ explicitly:
+
+```python
+context = build_esdf_from_scene(
+    scene, workspace_center=(0, 0, 0.34),
+    workspace_extent=(2.4, 2.4, 2.42), voxel_size=0.02, backend="cpp",
+)
+```
+
+NumPy remains the default. Selecting C++ without the extension raises a clear
+error. C++ releases the GIL, uses one thread, float32 voxel coordinates/output and
+double intermediate calculations, without fast-math. It packs obstacle constants
+and computes distances directly into one grid. The tested mixed, rotated and
+near-threshold scenes agree within 2e-7 metres; this is not a bitwise equivalence
+claim. The extension built with pybind11 3.0.4 is tested with NumPy 1.26.4 / 2.4.6.
+
+Measure fresh grid construction with separate processes for each backend:
+
+```bash
+OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 .venv/bin/python benchmarks/esdf.py \
+    --dataset demo --case-limit 5 --repeat 3 --output build/esdf-benchmark-demo.json
+```
+
+The report includes obstacle packing, computation, snapshot and total times,
+separate dataset loading/scene preparation times, peak RSS, CPU, compiler and
+source metadata. Each process discards one warmup grid, then builds a new grid
+for every repetition. Linux RSS uses the worker's `VmHWM`.
+
+On AMD Ryzen 7 7700, GCC 11.4 Release, Python 3.11 and NumPy 2.4.6,
+with a 120 × 120 × 121 grid (2 cm voxels):
+
+| Sample | NumPy median / P90 | C++ median / P90 | Peak RSS NumPy / C++ |
+|---|---|---|---|
+| demo, all 5 problems | 771 / 779 ms | 62 / 64 ms | 275 / 50 MiB |
+| MB, first problem in each of 8 groups | 1119 / 1596 ms | 78 / 136 ms | 315 / 50 MiB |
+
+These are medians across case medians with three builds per case; RSS is the
+maximum worker peak across sampled cases. The demo cases share geometry. These
+small samples do not establish performance for all MB800 or MPINets problems.
+
+## Local Planigo smoke
+
+Integration checks can run from this checkout and its `.venv` without changing
+Planigo's environment:
+
+```bash
+ROBOMETRICS_PLANIGO_ROOT=/path/to/planigo PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 \
+    .venv/bin/python -m pytest tests/planigo_test.py -q
+.venv/bin/python benchmarks/planigo_smoke.py \
+    --planigo-root /path/to/planigo --build-dir /path/to/planigo/igo_solver_pkg/build \
+    --output build/planigo-smoke.json
+```
+
+The Planigo checkout must provide the thin forwarding ESDF entry point. Its CUDA
+binary must match its current robot model. Host tests verify all five demo maps
+and the legacy workspace defaults. The native GPU smoke uploads an obstacle map,
+initializes/solves/executes, resets the task, then uploads an empty map and repeats.
+It uses NumPy/PyYAML and the existing CUDA extension, without JAX or SciPy. This
+checks native interface integration, not full planner convergence or evaluation.
+
+On 2026-10-15, the local host integration and ESDF tests passed (68 tests), and the
+Release/sm_120 native GPU smoke passed with one grid allocation for both maps.
+The existing Planigo environment, lock synchronization, JAX query integration and
+full benchmark validation remain separate steps.
 
 ## Data provenance
 
