@@ -162,7 +162,6 @@ PYBIND11_MODULE(_esdf_cpp, m) {
           py::arg("obstacles"), py::arg("timings") = py::none());
     m.attr("threads") = 1;
     m.attr("implementation_version") = 1;
-    m.attr("source_sha256") = ESDF_SOURCE_SHA256;
     m.attr("build_type") = ESDF_BUILD_TYPE;
     m.attr("compiler") = ESDF_COMPILER;
     m.attr("pybind11_version") = std::to_string(PYBIND11_VERSION_MAJOR) + "."

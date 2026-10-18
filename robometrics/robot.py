@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import logging
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Tuple, Union
@@ -78,29 +77,19 @@ class Robot:
 
     def _check_collision_spheres(self):
         """Verifies that the links in the collision sphere file match the URDF."""
-        link_names = set([lnk.name for lnk in self.urdf.links])
-        for link_name in self.collision_sphere_config.collision_spheres:
-            if link_name not in link_names:
-                logging.warning(
-                    "Collision sphere description file has"
-                    f" link ({link_name}) not found in URDF"
-                )
+        link_names = {link.name for link in self.urdf.links}
+        unknown = set(self.collision_sphere_config.collision_spheres) - link_names
+        if unknown:
+            raise ValueError(f"collision sphere links not found in URDF: {sorted(unknown)}")
 
     def _init_self_collision_spheres(self):
         """Creates a matrix for self-collision checking."""
-        link_names = set([lnk.name for lnk in self.urdf.links])
         radii = []
         cspheres = self.collision_sphere_config.collision_spheres
         buffers = self.collision_sphere_config.self_collision_buffer
         ignores = self.collision_sphere_config.self_collision_ignore
 
         for link_name, link_spheres in cspheres.items():
-            if link_name not in link_names:
-                logging.warning(
-                    "Self Collision sphere description file"
-                    f" has link ({link_name}) not found in URDF"
-                )
-                continue
             radii.extend(
                 [(link_name, s.radius + buffers[link_name]) for s in link_spheres]
             )
@@ -156,7 +145,7 @@ class Robot:
         spheres = self.collision_sphere_config.collision_spheres
         for link_name, link_spheres in spheres.items():
             if link_name not in fk:
-                continue
+                raise ValueError(f"collision sphere link missing from FK: {link_name}")
             centers.append(
                 transform_in_place(
                     np.stack([s.center for s in link_spheres]), fk[link_name]

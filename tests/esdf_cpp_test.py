@@ -103,4 +103,4 @@ def test_native_profiling_and_single_thread_contract():
     result = native.build(np.zeros(2), np.zeros(2), np.zeros(2), [], timings)
     assert result.shape == (2, 2, 2)
     assert timings["packing_s"] >= 0 and timings["compute_s"] >= 0
-    assert native.threads == 1 and len(native.source_sha256) == 64
+    assert native.threads == 1

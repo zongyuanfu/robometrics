@@ -116,10 +116,11 @@ class Evaluator:
                                   current group
         """
         if key is None:
+            key = self.current_group_key
             group = self.current_group
         else:
             group = self.groups[key]
-        save_path = Path(directory) / f"{test_name}_{self.current_group_key}.pkl"
+        save_path = Path(directory) / f"{test_name}_{key}.pkl"
         print(f"Saving group metrics to {save_path}")
         with open(save_path, "wb") as f:
             pickle.dump(group, f)

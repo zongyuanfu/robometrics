@@ -27,18 +27,20 @@ class Statistic:
 
     @classmethod
     def from_list(cls, lst: Sequence[float]):
-        if not lst:
-            return cls(0, 0, 0, 0, 0)
+        values = np.asarray(lst, dtype=float)
+        if values.ndim != 1:
+            raise ValueError("statistic samples must be a one-dimensional sequence")
+        # Non-finite entries are missing measurements, not zero measurements.
+        values = values[np.isfinite(values)]
+        if values.size == 0:
+            return cls(*(float("nan"),) * 5)
 
-        # We use np.inf as a way to filter out unwanted stats
-        lst = [le for le in lst if le < np.inf]
-
-        return Statistic(
-            np.mean(lst),
-            np.std(lst),
-            np.median(lst),
-            np.percentile(lst, 75),
-            np.percentile(lst, 98),
+        return cls(
+            float(np.mean(values)),
+            float(np.std(values)),
+            float(np.median(values)),
+            float(np.percentile(values, 75)),
+            float(np.percentile(values, 98)),
         )
 
     def __str__(self):

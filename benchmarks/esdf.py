@@ -46,7 +46,7 @@ def measure(connection, scene, backend, centre, extent, voxel, repeat):
 
             native.build = native_build
             native_info = {name: getattr(native, name) for name in (
-                "compiler", "build_type", "source_sha256", "pybind11_version",
+                "compiler", "build_type", "pybind11_version",
                 "threads", "implementation_version")}
         else:
             esdf._build_numpy = timed("compute_s", esdf._build_numpy)
